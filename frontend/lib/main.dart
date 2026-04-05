@@ -1,121 +1,177 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
-  runApp(const MyApp());
+  runApp(const TodoApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class TodoApp extends StatelessWidget {
+  const TodoApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      title: 'Todo App',
+      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blue),
+      home: const TodoPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
+class Todo {
+  final int id;
   final String title;
+  final bool done;
 
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  Todo({
+    required this.id,
+    required this.title,
+    required this.done,
+  });
+
+  factory Todo.fromJson(Map<String, dynamic> json) {
+    return Todo(
+      id: json['id'],
+      title: json['title'],
+      done: json['done'],
+    );
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class TodoPage extends StatefulWidget {
+  const TodoPage({super.key});
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  @override
+  State<TodoPage> createState() => _TodoPageState();
+}
+
+class _TodoPageState extends State<TodoPage> {
+  final TextEditingController _controller = TextEditingController();
+
+  // Android emulator:
+  // static const String baseUrl = 'http://10.0.2.2:8000';
+
+  // iOS simulator / desktop:
+  static const String baseUrl = 'http://127.0.0.1:8000';
+
+  List<Todo> todos = [];
+  bool loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchTodos();
+  }
+
+  Future<void> fetchTodos() async {
+    setState(() => loading = true);
+    final res = await http.get(Uri.parse('$baseUrl/todos'));
+    if (res.statusCode == 200) {
+      final List data = jsonDecode(res.body);
+      setState(() {
+        todos = data.map((e) => Todo.fromJson(e)).toList();
+        loading = false;
+      });
+    } else {
+      setState(() => loading = false);
+    }
+  }
+
+  Future<void> addTodo() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+
+    final res = await http.post(
+      Uri.parse('$baseUrl/todos'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'title': text}),
+    );
+
+    if (res.statusCode == 200) {
+      _controller.clear();
+      fetchTodos();
+    }
+  }
+
+  Future<void> toggleTodo(Todo todo) async {
+    final res = await http.put(
+      Uri.parse('$baseUrl/todos/${todo.id}'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'done': !todo.done}),
+    );
+
+    if (res.statusCode == 200) {
+      fetchTodos();
+    }
+  }
+
+  Future<void> deleteTodo(int id) async {
+    final res = await http.delete(Uri.parse('$baseUrl/todos/$id'));
+    if (res.statusCode == 200) {
+      fetchTodos();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      appBar: AppBar(title: const Text('Todo App')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
           children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    decoration: const InputDecoration(
+                      hintText: 'Add a task',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: addTodo,
+                  child: const Text('Add'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : ListView.builder(
+                      itemCount: todos.length,
+                      itemBuilder: (context, index) {
+                        final todo = todos[index];
+                        return Card(
+                          child: ListTile(
+                            leading: Checkbox(
+                              value: todo.done,
+                              onChanged: (_) => toggleTodo(todo),
+                            ),
+                            title: Text(
+                              todo.title,
+                              style: TextStyle(
+                                decoration: todo.done
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                              ),
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete),
+                              onPressed: () => deleteTodo(todo.id),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
       ),
     );
   }
